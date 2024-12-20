@@ -24,7 +24,9 @@ arrays of unknown size.
 *****************************************************/
 #include <vector>
 #define GLM_FORCE_RADIANS
+#include <GL/glew.h>
 #include <glm/gtc/matrix_transform.hpp>
+
 
 #ifndef __GEOMETRY_H__
 #define __GEOMETRY_H__

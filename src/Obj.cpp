@@ -108,5 +108,3 @@ void Obj::init(const char * filename){
     glBindVertexArray(0);
     std::cout << "done." << std::endl;
 }
-
-
