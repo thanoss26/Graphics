@@ -24,7 +24,6 @@ arrays of unknown size.
 *****************************************************/
 #include <vector>
 #define GLM_FORCE_RADIANS
-#include <GL/glew.h>
 #include <glm/gtc/matrix_transform.hpp>
 
 
@@ -70,7 +69,6 @@ public:
 
     void draw(void){
         glBindVertexArray(vao);
-
         glDrawElements(mode,count,type,0);
     }
 };

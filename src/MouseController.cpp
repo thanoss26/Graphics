@@ -1,10 +1,10 @@
 #include <MouseController.h>
-#include <img/imgui_impl_glut.cpp>
 #include <iostream>
 #include <Obj.h>
 #include <glm.hpp>
 #include <Camera.h>
 #include "main.cpp"
+#include <img/imgui_impl_glut.cpp>
 
 // Mouse control
 int lastMouseX, lastMouseY;
