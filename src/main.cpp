@@ -37,30 +37,31 @@ const char* modelNames[] = { "Teapot", "Bunny", "Sphere" }; // Names for UI
 int selectedModelIndex = -1; // No model selected by default
 std::vector<std::unique_ptr<Obj>> loadedModels;
 
-//shader
-struct NormalShader : Shader {
+struct NormalShader : Shader
+{
     glm::mat4 modelview = glm::mat4(1.0f);
-    GLuint modelview_loc = 0;
+    GLuint modelview_loc;
     glm::mat4 projection = glm::mat4(1.0f);
-    GLuint projection_loc = 0;
-    GLuint isHighlighted_loc = 0;
-
-    NormalShader() {}
+    GLuint projection_loc;
+    GLuint isHighlighted_loc;
+    GLuint highlightColor_loc; // New uniform for highlight color
 
     void initUniforms() {
         modelview_loc = glGetUniformLocation(program, "modelview");
         projection_loc = glGetUniformLocation(program, "projection");
         isHighlighted_loc = glGetUniformLocation(program, "isHighlighted");
+        highlightColor_loc = glGetUniformLocation(program, "highlightColor"); // Initialize highlight color uniform
     }
 
-    void setUniforms(bool isHighlighted = false) {
+    void setUniforms(bool isHighlighted = false, glm::vec3 highlightColor = glm::vec3(1.0f, 0.0f, 0.0f)) {
         glUniformMatrix4fv(modelview_loc, 1, GL_FALSE, &modelview[0][0]);
         glUniformMatrix4fv(projection_loc, 1, GL_FALSE, &projection[0][0]);
         glUniform1i(isHighlighted_loc, static_cast<GLint>(isHighlighted));
+        glUniform3fv(highlightColor_loc, 1, &highlightColor[0]); // Set highlight color
     }
 };
-static NormalShader shader;
 
+static NormalShader shader;
 // Initialize Models
 void initializeModels() {
     try {
@@ -135,8 +136,13 @@ void reshape(int w, int h) {
     // Update ImGui display size
     ImGui::GetIO().DisplaySize = ImVec2(w, h); // Update ImGui size
 }
-// Initialize random seed once
-//std::srand(static_cast<unsigned>(std::time(nullptr)));
+
+// Define the camera parameters
+glm::vec3 cameraPosition(0.0f, 0.0f, 5.0f); // Example camera position
+glm::vec3 cameraTarget(0.0f, 0.0f, 0.0f); // Camera target
+glm::vec3 cameraUp(0.0f, 1.0f, 0.0f); // Up direction
+glm::mat4 viewMatrix = glm::lookAt(cameraPosition, cameraTarget, cameraUp);
+
 void renderUI() {
     ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplGLUT_NewFrame();
@@ -176,16 +182,19 @@ void renderUI() {
         }
 
         // Define the distance from the camera
-        float distanceFromCamera = 8.0f;
+        float distanceFromCamera = 5.0f;
 
         // Calculate the model's base position in front of the camera
-        glm::vec3 cameraForward = glm::normalize(camera.target - camera.eye); // Forward direction
-        glm::vec3 basePosition = camera.eye + cameraForward * distanceFromCamera;
+        glm::vec3 cameraForward = glm::normalize(cameraTarget - cameraPosition); // Forward direction
+        glm::vec3 basePosition = cameraPosition + cameraForward * distanceFromCamera;
 
-        // Add random offsets to the position
-        float randomOffsetX = (std::rand() % 200 - 100) / 100.0f; // Random value between -1.0 and 1.0
-        float randomOffsetY = (std::rand() % 200 - 100) / 100.0f; // Random value between -1.0 and 1.0
-        float randomOffsetZ = (std::rand() % 200 - 100) / 100.0f; // Random value between -1.0 and 1.0
+        // Add random offsets within the visible frustum
+        float frustumWidth = distanceFromCamera * tan(glm::radians(45.0f)); // Adjust based on your field of view
+        float frustumHeight = frustumWidth / (16.0f / 9.0f); // Adjust based on your aspect ratio
+
+        float randomOffsetX = (std::rand() % 200 - 100) / 100.0f * frustumWidth;
+        float randomOffsetY = (std::rand() % 200 - 100) / 100.0f * frustumHeight;
+        float randomOffsetZ = (std::rand() % 200) / 100.0f; // Random value between 0 and 2.0f
 
         glm::vec3 randomOffset(randomOffsetX, randomOffsetY, randomOffsetZ);
 
@@ -207,26 +216,45 @@ void renderUI() {
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 }
 
+
 void renderModels() {
     glUseProgram(shader.program);
+    camera.computeMatrices();
 
-    // Render predefined models
+    // Loop through static models
     for (size_t i = 0; i < std::size(models); ++i) {
         bool isHighlighted = (i == selectedModelIndex);
+        glm::vec4 highlightColor = isHighlighted ? glm::vec4(1.0f, 0.0f, 0.0f, 1.0f) : glm::vec4(0.8f, 0.8f, 0.8f, 0.8f); // Red for highlight, white otherwise
+
         shader.modelview = camera.view * models[i]->model;
-        shader.setUniforms(isHighlighted);
+        shader.setUniforms(isHighlighted, glm::vec3(highlightColor)); // Set highlight color
         models[i]->draw();
     }
 
     // Render dynamically loaded models
     for (const auto& loadedModel : loadedModels) {
+        if (!loadedModel) {
+            // Skip if the model is null (safety check)
+            continue;
+        }
+
+        // Check if selectedModelIndex is within the bounds of loadedModels
+        bool isHighlighted = false;
+        if (selectedModelIndex >= 0 && selectedModelIndex < loadedModels.size()) {
+            isHighlighted = (loadedModel.get() == loadedModels[selectedModelIndex].get());
+        }
+
         shader.modelview = camera.view * loadedModel->model;
-        shader.setUniforms(false); // No highlighting for added models
+
+        // Set highlight color for dynamically loaded models (red if highlighted, white otherwise)
+        glm::vec4 highlightColor = isHighlighted ? glm::vec4(1.0f, 0.0f, 0.0f, 1.0f) : glm::vec4(0.8f, 0.8f, 0.8f, 0.8f);
+
+        shader.setUniforms(isHighlighted, glm::vec3(highlightColor)); // Set highlight color
         loadedModel->draw();
     }
 }
-
-void display() {
+void display() 
+{
     if (bWireframe)
         glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
     else
@@ -249,17 +277,30 @@ void cleanup() {
     ImGui_ImplGLUT_Shutdown();
     ImGui::DestroyContext();
 }
-glm::vec3 screenToWorldRay(int mouseX, int mouseY) {
-    float x = (2.0f * mouseX) / width - 1.0f;
-    float y = 1.0f - (2.0f * mouseY) / height;
-    glm::vec4 rayClip(x, y, -1.0f, 1.0f);
 
-    glm::vec4 rayEye = glm::inverse(camera.proj) * rayClip;
-    rayEye.z = -1.0f;
-    rayEye.w = 0.0f;
+glm::vec3 screenToWorldRay(int mouseX, int mouseY, int screenWidth, int screenHeight, const glm::mat4& projection, const glm::mat4& view) {
+    // Normalize screen coordinates to [-1, 1]
+    float x = (2.0f * mouseX) / screenWidth - 1.0f;
+    float y = 1.0f - (2.0f * mouseY) / screenHeight;
+    glm::vec4 ray_clip(x, y, -1.0f, 1.0f);
 
-    glm::vec3 rayWorld = glm::vec3(glm::inverse(camera.view) * rayEye);
-    return glm::normalize(rayWorld);
+    // Transform from clip space to camera space
+    glm::vec4 ray_eye = glm::inverse(projection) * ray_clip;
+    ray_eye = glm::vec4(ray_eye.x, ray_eye.y, -1.0f, 0.0f); // Set w = 0 for directions
+
+    // Transform from camera space to world space
+    glm::vec3 ray_world = glm::vec3(glm::inverse(view) * ray_eye);
+    ray_world = glm::normalize(ray_world); // Normalize to get direction
+
+    return ray_world;
+}
+void onMouseClick(int button, int state, int x, int y) {
+    if (button == GLUT_LEFT_BUTTON && state == GLUT_DOWN) {
+        glm::vec3 rayDirection = screenToWorldRay(x, y, width, height, camera.proj, camera.view);
+
+        // Perform ray-object intersection here
+        std::cout << "Ray Direction: " << rayDirection.x << ", " << rayDirection.y << ", " << rayDirection.z << std::endl;
+    }
 }
 
 bool rayIntersectsModel(const glm::vec3& rayOrigin, const glm::vec3& rayDirection, Geometry* model, float radius) {
@@ -284,6 +325,8 @@ void mouseCallback(int button, int state, int x, int y) {
             std::cout << "Left mouse button clicked at (" << x << ", " << y << ")" << std::endl;
         }
     }
+
+
 }
 
 
@@ -344,6 +387,7 @@ int main(int argc, char** argv) {
     glutDisplayFunc(display);
     glutReshapeFunc(reshape);
     glutMouseFunc(mouseFunc);
+    glutMouseFunc(onMouseClick);
     glutMotionFunc(motionFunc);
     glutPassiveMotionFunc(motionFunc);
     glutIdleFunc(glutPostRedisplay);
