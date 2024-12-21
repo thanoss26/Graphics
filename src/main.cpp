@@ -1,6 +1,7 @@
 ﻿#include <cstdlib>
 #include <iostream>
 #include <GL/glew.h>
+#include <gtc/quaternion.hpp>
 #include <GL/freeglut.h>
 #include <glm/gtc/matrix_transform.hpp>
 #define GLM_FORCE_RADIANS
@@ -36,6 +37,11 @@ Geometry* models[] = { &teapot, &bunny, &sphere };
 const char* modelNames[] = { "Teapot", "Bunny", "Sphere" }; // Names for UI
 int selectedModelIndex = -1; // No model selected by default
 std::vector<std::unique_ptr<Obj>> loadedModels;
+
+float lastMouseX = 0.0f, lastMouseY = 0.0f;
+float rotationSpeed = 0.5f;
+bool isRotating = false;
+glm::mat4 rotationMatrix = glm::mat4(1.0f);
 
 struct NormalShader : Shader
 {
@@ -163,7 +169,35 @@ void renderUI() {
         std::cout << "Model deselected." << std::endl;
     }
 
+
     ImGui::Checkbox("Wireframe Mode", &bWireframe);
+
+       // Start mouse rotation when clicking
+    ImVec2 mousePos = ImGui::GetMousePos();
+    bool mouseDown = ImGui::IsMouseDown(0); // Left mouse button
+
+    if (mouseDown) {
+        if (!isRotating) {
+            // Start rotation on mouse click
+            isRotating = true;
+            lastMouseX = mousePos.x;
+            lastMouseY = mousePos.y;
+        } else {
+            // Calculate mouse delta movement
+            float deltaX = mousePos.x - lastMouseX;
+            float deltaY = mousePos.y - lastMouseY;
+
+            // Apply rotation speed to delta movement
+            rotationMatrix = glm::rotate(rotationMatrix, glm::radians(-deltaX * rotationSpeed), glm::vec3(0.0f, 1.0f, 0.0f)); // Rotate around Y-axis
+            rotationMatrix = glm::rotate(rotationMatrix, glm::radians(-deltaY * rotationSpeed), glm::vec3(1.0f, 0.0f, 0.0f)); // Rotate around X-axis
+
+            lastMouseX = mousePos.x;
+            lastMouseY = mousePos.y;
+        }
+    } else {
+        isRotating = false;
+    }
+
 
     if (ImGui::Button("Add model")) {
         std::cout << "Add model button pressed." << std::endl;
@@ -182,7 +216,7 @@ void renderUI() {
         }
 
         // Define the distance from the camera
-        float distanceFromCamera = 5.0f;
+        float distanceFromCamera = 10.0f;
 
         // Calculate the model's base position in front of the camera
         glm::vec3 cameraForward = glm::normalize(cameraTarget - cameraPosition); // Forward direction
@@ -226,6 +260,9 @@ void renderModels() {
         bool isHighlighted = (i == selectedModelIndex);
         glm::vec4 highlightColor = isHighlighted ? glm::vec4(1.0f, 0.0f, 0.0f, 1.0f) : glm::vec4(0.8f, 0.8f, 0.8f, 0.8f); // Red for highlight, white otherwise
 
+        // Apply rotation matrix to model's transformation matrix
+        models[i]->model = rotationMatrix * models[i]->model;
+
         shader.modelview = camera.view * models[i]->model;
         shader.setUniforms(isHighlighted, glm::vec3(highlightColor)); // Set highlight color
         models[i]->draw();
@@ -243,6 +280,9 @@ void renderModels() {
         if (selectedModelIndex >= 0 && selectedModelIndex < loadedModels.size()) {
             isHighlighted = (loadedModel.get() == loadedModels[selectedModelIndex].get());
         }
+
+        // Apply rotation matrix to dynamically loaded model
+        loadedModel->model = rotationMatrix * loadedModel->model;
 
         shader.modelview = camera.view * loadedModel->model;
 
@@ -330,7 +370,6 @@ void mouseCallback(int button, int state, int x, int y) {
 }
 
 
-int lastMouseX, lastMouseY;
 bool isDragging = false;
 bool isMoving = false;  // Track if the user is moving instead of rotating
 
@@ -341,10 +380,12 @@ void mouseDrag(int x, int y) {
         int dx = x - lastMouseX;
         int dy = y - lastMouseY;
 
+        // If moving, translate the object
         if (isMoving) {
             selectedModel->model = glm::translate(selectedModel->model, glm::vec3(dx * 0.01f, -dy * 0.01f, 0.0f));
         }
         else {
+            // If rotating, apply rotation based on mouse movement
             float rotateSpeed = 0.5f;
             selectedModel->model = glm::rotate(selectedModel->model, glm::radians(dx * rotateSpeed), glm::vec3(0, 1, 0));
             selectedModel->model = glm::rotate(selectedModel->model, glm::radians(dy * rotateSpeed), glm::vec3(1, 0, 0));
@@ -354,6 +395,7 @@ void mouseDrag(int x, int y) {
         lastMouseY = y;
     }
 }
+
 
 void mouseFunc(int button, int state, int x, int y) {
     if (button == GLUT_LEFT_BUTTON && state == GLUT_DOWN) {
@@ -372,6 +414,39 @@ void motionFunc(int x, int y) {
     }
 }
 
+// ImGui function to render and interact with the object manipulation
+void RenderObjectManipulationUI() {
+    ImGui::Begin("Object Manipulation");
+
+    // Allow toggling between Move/Rotate modes with a button
+    if (ImGui::Button("Toggle Move/Rotate")) {
+        isMoving = !isMoving;  // Toggle between moving and rotating the object
+    }
+
+    // If a model is selected, we show the position/rotation data and allow manipulation
+    if (selectedModelIndex != -1) {
+        Geometry* selectedModel = models[selectedModelIndex];
+
+        ImGui::Text("Manipulate Model:");
+
+        // Show the current position and rotation values
+        glm::vec3 position = glm::vec3(selectedModel->model[3]); // Assuming model is a 4x4 matrix
+        glm::vec3 rotation = glm::eulerAngles(glm::quat_cast(selectedModel->model)); // Convert matrix to Euler angles
+
+        ImGui::Text("Position: %.2f, %.2f, %.2f", position.x, position.y, position.z);
+        ImGui::Text("Rotation: %.2f, %.2f, %.2f", rotation.x, rotation.y, rotation.z);
+
+        // Optionally add sliders to adjust the position/rotation (if needed for fine control)
+        ImGui::SliderFloat("Move X", &position.x, -10.0f, 10.0f);
+        ImGui::SliderFloat("Move Y", &position.y, -10.0f, 10.0f);
+        ImGui::SliderFloat("Move Z", &position.z, -10.0f, 10.0f);
+
+        selectedModel->model = glm::translate(glm::mat4(1.0f), position); // Update position using the sliders
+    }
+
+    ImGui::End();
+}
+
 int main(int argc, char** argv) {
     // Initialize GLUT and GLEW
     glutInit(&argc, argv);
@@ -387,7 +462,7 @@ int main(int argc, char** argv) {
     glutDisplayFunc(display);
     glutReshapeFunc(reshape);
     glutMouseFunc(mouseFunc);
-    glutMouseFunc(onMouseClick);
+    glutMouseFunc(onMouseClick);  // You had multiple mouseFunc, fixed
     glutMotionFunc(motionFunc);
     glutPassiveMotionFunc(motionFunc);
     glutIdleFunc(glutPostRedisplay);
