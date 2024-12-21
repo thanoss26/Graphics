@@ -155,14 +155,12 @@ void renderUI() {
     }
 
     ImGui::Checkbox("Wireframe Mode", &bWireframe);
-
-
     // Ensure the model is correctly initialized
     if (selectedModelIndex != -1) {
         std::cout << "Loading model: " << modelNames[selectedModelIndex] << std::endl;
 
         try {
-            // Load the selected model
+            // Load the selected model (existing logic)
             if (selectedModelIndex == 0) {
                 cube.init();
                 models[selectedModelIndex] = &cube;
@@ -200,6 +198,7 @@ void renderUI() {
     ImGui::Render();
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 }
+
 
 void renderModels() 
 {
