@@ -6,6 +6,8 @@
 #define GLM_FORCE_RADIANS
 #include <glm/glm.hpp>
 #include "Screenshot.h"
+#include <cstdlib>
+#include <ctime> 
 #include "Shader.h"
 #include "Cube.h"
 #include "Obj.h"
@@ -30,9 +32,10 @@ static bool bWireframe = false;
 static bool objectLoaded = false;
 
 // Models in the scene
-Geometry* models[] = { &cube, &teapot, &bunny, &sphere };
-const char* modelNames[] = { "Cube", "Teapot", "Bunny", "Sphere" }; // Names for UI
+Geometry* models[] = { &teapot, &bunny, &sphere };
+const char* modelNames[] = { "Teapot", "Bunny", "Sphere" }; // Names for UI
 int selectedModelIndex = -1; // No model selected by default
+std::vector<std::unique_ptr<Obj>> loadedModels;
 
 //shader
 struct NormalShader : Shader {
@@ -132,7 +135,8 @@ void reshape(int w, int h) {
     // Update ImGui display size
     ImGui::GetIO().DisplaySize = ImVec2(w, h); // Update ImGui size
 }
-
+// Initialize random seed once
+//std::srand(static_cast<unsigned>(std::time(nullptr)));
 void renderUI() {
     ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplGLUT_NewFrame();
@@ -150,47 +154,51 @@ void renderUI() {
 
     if (ImGui::Button("Deselect")) {
         selectedModelIndex = -1;
-        objectLoaded = false;
         std::cout << "Model deselected." << std::endl;
     }
 
     ImGui::Checkbox("Wireframe Mode", &bWireframe);
-    // Ensure the model is correctly initialized
-    if (selectedModelIndex != -1) {
-        std::cout << "Loading model: " << modelNames[selectedModelIndex] << std::endl;
 
-        try {
-            // Load the selected model (existing logic)
-            if (selectedModelIndex == 0) {
-                cube.init();
-                models[selectedModelIndex] = &cube;
-            }
-            else if (selectedModelIndex == 1) {
-                teapot.init("models/teapot.obj");
-                models[selectedModelIndex] = &teapot;
-            }
-            else if (selectedModelIndex == 2) {
-                bunny.init("models/bunny.obj");
-                models[selectedModelIndex] = &bunny;
-            }
-            else if (selectedModelIndex == 3) {
-                sphere.init("models/sphere.obj");
-                models[selectedModelIndex] = &sphere;
-            }
+    if (ImGui::Button("Add model")) {
+        std::cout << "Add model button pressed." << std::endl;
 
-            // Generate a random position within a defined range
-            glm::vec3 randomPos = generateRandomPosition(-5.0f, 5.0f);
+        // Create a new model based on the selected model index
+        std::unique_ptr<Obj> newModel = std::make_unique<Obj>();
 
-            // Set the model's transformation matrix to the random position
-            models[selectedModelIndex]->model = glm::translate(glm::mat4(1.0f), randomPos);
-
-            objectLoaded = true; // Set the flag to indicate an object is loaded
-            std::cout << "Model loaded at random position: " << randomPos.x << ", " << randomPos.y << ", " << randomPos.z << std::endl;
-
+        if (selectedModelIndex == 0) {
+            newModel->init("models/teapot.obj");
         }
-        catch (const std::exception& e) {
-            std::cerr << "Error loading model: " << e.what() << std::endl;
+        else if (selectedModelIndex == 1) {
+            newModel->init("models/bunny.obj");
         }
+        else if (selectedModelIndex == 2) {
+            newModel->init("models/sphere.obj");
+        }
+
+        // Define the distance from the camera
+        float distanceFromCamera = 8.0f;
+
+        // Calculate the model's base position in front of the camera
+        glm::vec3 cameraForward = glm::normalize(camera.target - camera.eye); // Forward direction
+        glm::vec3 basePosition = camera.eye + cameraForward * distanceFromCamera;
+
+        // Add random offsets to the position
+        float randomOffsetX = (std::rand() % 200 - 100) / 100.0f; // Random value between -1.0 and 1.0
+        float randomOffsetY = (std::rand() % 200 - 100) / 100.0f; // Random value between -1.0 and 1.0
+        float randomOffsetZ = (std::rand() % 200 - 100) / 100.0f; // Random value between -1.0 and 1.0
+
+        glm::vec3 randomOffset(randomOffsetX, randomOffsetY, randomOffsetZ);
+
+        // Set the model's position to the base position plus the random offset
+        glm::vec3 modelPosition = basePosition + randomOffset;
+
+        // Set the model's transformation matrix
+        newModel->model = glm::translate(glm::mat4(1.0f), modelPosition);
+
+        // Add the new model to the list of loaded models
+        loadedModels.push_back(std::move(newModel));
+
+        std::cout << "New model added at position: " << modelPosition.x << ", " << modelPosition.y << ", " << modelPosition.z << std::endl;
     }
 
     ImGui::End();
@@ -199,15 +207,22 @@ void renderUI() {
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 }
 
-
-void renderModels() 
-{
+void renderModels() {
     glUseProgram(shader.program);
-    if (objectLoaded) { // Only render the selected object if it is loaded
-        shader.setUniforms(selectedModelIndex == selectedModelIndex); // Highlight the selected model
-        shader.modelview = camera.view * models[selectedModelIndex]->model;
-        shader.setUniforms(selectedModelIndex == selectedModelIndex); // Highlight the selected model
-        models[selectedModelIndex]->draw();
+
+    // Render predefined models
+    for (size_t i = 0; i < std::size(models); ++i) {
+        bool isHighlighted = (i == selectedModelIndex);
+        shader.modelview = camera.view * models[i]->model;
+        shader.setUniforms(isHighlighted);
+        models[i]->draw();
+    }
+
+    // Render dynamically loaded models
+    for (const auto& loadedModel : loadedModels) {
+        shader.modelview = camera.view * loadedModel->model;
+        shader.setUniforms(false); // No highlighting for added models
+        loadedModel->draw();
     }
 }
 
@@ -248,7 +263,7 @@ glm::vec3 screenToWorldRay(int mouseX, int mouseY) {
 }
 
 bool rayIntersectsModel(const glm::vec3& rayOrigin, const glm::vec3& rayDirection, Geometry* model, float radius) {
-    glm::vec3 modelPos = glm::vec3(model->model[3]);
+    glm::vec3 modelPos = glm::vec3(model->model[3]); // Extract position from the model matrix
     glm::vec3 oc = rayOrigin - modelPos;
 
     float a = glm::dot(rayDirection, rayDirection);
@@ -256,8 +271,9 @@ bool rayIntersectsModel(const glm::vec3& rayOrigin, const glm::vec3& rayDirectio
     float c = glm::dot(oc, oc) - radius * radius;
 
     float discriminant = b * b - 4 * a * c;
-    return (discriminant > 0);
+    return discriminant > 0; // Intersection occurs if the discriminant is positive
 }
+
 
 void mouseCallback(int button, int state, int x, int y) {
     ImGui_ImplGLUT_MouseFunc(button, state, x, y); // Pass mouse events to ImGui
