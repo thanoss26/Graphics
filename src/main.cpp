@@ -30,8 +30,7 @@ static bool bWireframe = false;
 static bool objectLoaded = false;
 
 // Models in the scene
-//Geometry* models[] = { &cube, &teapot, &bunny, &sphere };
-std::vector<Geometry*> models;
+Geometry* models[] = { &cube, &teapot, &bunny, &sphere };
 const char* modelNames[] = { "Cube", "Teapot", "Bunny", "Sphere" }; // Names for UI
 int selectedModelIndex = -1; // No model selected by default
 
@@ -59,10 +58,6 @@ struct NormalShader : Shader {
 };
 static NormalShader shader;
 
-int lastMouseX, lastMouseY;
-bool isDragging = false;
-bool isMoving = false;  // Track if the user is moving instead of rotating
-
 // Initialize Models
 void initializeModels() {
     try {
@@ -88,11 +83,6 @@ glm::vec3 generateRandomPosition(float rangeMin, float rangeMax) {
     float y = rangeMin + static_cast<float>(rand()) / (static_cast<float>(RAND_MAX / (rangeMax - rangeMin)));
     float z = rangeMin + static_cast<float>(rand()) / (static_cast<float>(RAND_MAX / (rangeMax - rangeMin)));
     return glm::vec3(x, y, z);
-}
-
-void addModel(Geometry* model) 
-{
-    models.push_back(model);
 }
 
 void initialize() {
@@ -131,46 +121,6 @@ void initialize() {
     ImGui::GetIO().DisplaySize = ImVec2(width, height); // Ensure DisplaySize is set at initialization
 }
 
-void loadNewModel() {
-    try {
-        // List of available model files
-        std::vector<std::string> modelFiles = {
-            "models/teapot.obj",
-            "models/bunny.obj",
-            "models/sphere.obj"
-        };
-
-        // Seed the random number generator
-        srand(static_cast<unsigned int>(time(0)));
-
-        // Pick a random index from the modelFiles vector
-        int randomIndex = rand() % modelFiles.size();
-
-        // Attempt to load the new model
-        Obj* newModel = new Obj();
-
-        // Load the model from the randomly selected file (use c_str() to convert std::string to const char)
-        newModel->init(modelFiles[randomIndex].c_str());
-
-        // Apply a random transformation to the new model (e.g., random position)
-        glm::vec3 randomPosition(
-            (rand() % 100 - 50) * 0.1f,  // Random x between -5.0 and 5.0
-            (rand() % 100 - 50) * 0.1f,  // Random y between -5.0 and 5.0
-            (rand() % 100 - 50) * 0.1f   // Random z between -5.0 and 5.0
-        );
-        newModel->model = glm::translate(glm::mat4(1.0f), randomPosition);
-
-        // Add the new model to the scene
-        addModel(newModel);
-
-        // Update the display to render the new model
-        glutPostRedisplay();
-    }
-    catch (const std::exception& e) {
-        std::cerr << "Error loading new model: " << e.what() << std::endl;
-    }
-}
-
 void reshape(int w, int h) {
     // Update the OpenGL viewport to match the new window size
     glViewport(0, 0, w, h);
@@ -194,11 +144,8 @@ void renderUI() {
     ImGui::Begin("Model Selection");
     ImGui::Text("Select a model:");
 
-    // Check if the model selection has changed
-    bool modelChanged = false;
     if (ImGui::Combo("Models", &selectedModelIndex, modelNames, IM_ARRAYSIZE(modelNames))) {
         std::cout << "Selected Model: " << modelNames[selectedModelIndex] << std::endl;
-        modelChanged = true; // Model selection has changed
     }
 
     if (ImGui::Button("Deselect")) {
@@ -209,8 +156,9 @@ void renderUI() {
 
     ImGui::Checkbox("Wireframe Mode", &bWireframe);
 
-    // Load model only if it has changed or hasn't been loaded yet
-    if (modelChanged && selectedModelIndex != -1 && !objectLoaded) {
+
+    // Ensure the model is correctly initialized
+    if (selectedModelIndex != -1) {
         std::cout << "Loading model: " << modelNames[selectedModelIndex] << std::endl;
 
         try {
@@ -232,23 +180,18 @@ void renderUI() {
                 models[selectedModelIndex] = &sphere;
             }
 
+            // Generate a random position within a defined range
+            glm::vec3 randomPos = generateRandomPosition(-5.0f, 5.0f);
+
+            // Set the model's transformation matrix to the random position
+            models[selectedModelIndex]->model = glm::translate(glm::mat4(1.0f), randomPos);
+
             objectLoaded = true; // Set the flag to indicate an object is loaded
+            std::cout << "Model loaded at random position: " << randomPos.x << ", " << randomPos.y << ", " << randomPos.z << std::endl;
+
         }
         catch (const std::exception& e) {
             std::cerr << "Error loading model: " << e.what() << std::endl;
-        }
-    }
-
-    // Add Model Button
-    if (ImGui::Button("Add Model")) {
-        if (selectedModelIndex != -1) {
-            glm::vec3 position = generateRandomPosition(-5.0f, 5.0f); // Generate a random position for the model
-            Geometry* selectedModel = models[selectedModelIndex];
-            selectedModel->model = glm::translate(glm::mat4(1.0f), position); // Set the model's position
-            std::cout << modelNames[selectedModelIndex] << " added at position: " << position.x << ", " << position.y << ", " << position.z << std::endl;
-        }
-        else {
-            std::cout << "No model selected to add." << std::endl;
         }
     }
 
@@ -261,13 +204,11 @@ void renderUI() {
 void renderModels() 
 {
     glUseProgram(shader.program);
-    camera.computeMatrices();
-    shader.projection = camera.proj;
-
-    for (size_t i = 0; i < models.size(); i++) {
-        shader.modelview = camera.view * models[i]->model;  // Assuming `model` is the transformation matrix for the model
-        shader.setUniforms();
-        models[i]->draw();  // Assuming the Geometry class has a draw function
+    if (objectLoaded) { // Only render the selected object if it is loaded
+        shader.setUniforms(selectedModelIndex == selectedModelIndex); // Highlight the selected model
+        shader.modelview = camera.view * models[selectedModelIndex]->model;
+        shader.setUniforms(selectedModelIndex == selectedModelIndex); // Highlight the selected model
+        models[selectedModelIndex]->draw();
     }
 }
 
@@ -294,7 +235,6 @@ void cleanup() {
     ImGui_ImplGLUT_Shutdown();
     ImGui::DestroyContext();
 }
-
 glm::vec3 screenToWorldRay(int mouseX, int mouseY) {
     float x = (2.0f * mouseX) / width - 1.0f;
     float y = 1.0f - (2.0f * mouseY) / height;
@@ -316,147 +256,90 @@ bool rayIntersectsModel(const glm::vec3& rayOrigin, const glm::vec3& rayDirectio
     float b = 2.0f * glm::dot(oc, rayDirection);
     float c = glm::dot(oc, oc) - radius * radius;
 
-    float discriminant = b * b - 4.0f * a * c;
-    if (discriminant < 0.0f)
-        return false;
-
-    float t1 = (-b - sqrt(discriminant)) / (2.0f * a);
-    float t2 = (-b + sqrt(discriminant)) / (2.0f * a);
-
-    return t1 > 0.0f || t2 > 0.0f;
+    float discriminant = b * b - 4 * a * c;
+    return (discriminant > 0);
 }
 
-void mouseFunc(int button, int state, int x, int y) {
+void mouseCallback(int button, int state, int x, int y) {
     ImGui_ImplGLUT_MouseFunc(button, state, x, y); // Pass mouse events to ImGui
 
     if (!ImGui::GetIO().WantCaptureMouse) { // Only process if ImGui doesn't capture the mouse
-        if (button == GLUT_LEFT_BUTTON) {
-            if (state == GLUT_DOWN) {
-                std::cout << "Left mouse button clicked at (" << x << ", " << y << ")" << std::endl;
-
-                // Convert screen coordinates to world ray
-                glm::vec3 rayOrigin = camera.eye;
-                glm::vec3 rayDirection = screenToWorldRay(x, y);
-
-                // Check for intersections with models
-                for (int i = 0; i < models.size(); ++i) 
-                {
-                    if (models[i] != nullptr && rayIntersectsModel(rayOrigin, rayDirection, models[i], 1.0f)) 
-                    {
-                        std::cout << "Model " << modelNames[i] << " was clicked!" << std::endl;
-
-                        // Highlight the selected model
-
-                        
-                        selectedModelIndex = i;
-                        objectLoaded = true;
-                        break;
-                    }
-                }
-            }
-            else if (state == GLUT_UP) {
-                isDragging = false;
-            }
-            loadNewModel();
+        // Add your custom mouse handling logic here
+        if (button == GLUT_LEFT_BUTTON && state == GLUT_DOWN) {
+            std::cout << "Left mouse button clicked at (" << x << ", " << y << ")" << std::endl;
         }
-        
     }
-    
 }
+
+
+int lastMouseX, lastMouseY;
+bool isDragging = false;
+bool isMoving = false;  // Track if the user is moving instead of rotating
 
 void mouseDrag(int x, int y) {
     if (selectedModelIndex != -1 && isDragging) {
         Geometry* selectedModel = models[selectedModelIndex];
 
-        // Get the mouse movement in screen space
         int dx = x - lastMouseX;
         int dy = y - lastMouseY;
 
-        // Use raycasting to determine how much to move the model based on the mouse movement
-        glm::vec3 rayOrigin = camera.eye;
-        glm::vec3 rayDirection = screenToWorldRay(x, y);
+        if (isMoving) {
+            selectedModel->model = glm::translate(selectedModel->model, glm::vec3(dx * 0.01f, -dy * 0.01f, 0.0f));
+        }
+        else {
+            float rotateSpeed = 0.5f;
+            selectedModel->model = glm::rotate(selectedModel->model, glm::radians(dx * rotateSpeed), glm::vec3(0, 1, 0));
+            selectedModel->model = glm::rotate(selectedModel->model, glm::radians(dy * rotateSpeed), glm::vec3(1, 0, 0));
+        }
 
-        // Calculate a point in world space to move the model to (this can be a simple plane intersection)
-        glm::vec3 moveDelta = glm::normalize(rayDirection) * 0.1f; // Adjust scale as needed (this controls the speed)
-
-        // Update model position
-        selectedModel->model = glm::translate(selectedModel->model, moveDelta);
-
-        // Store the last mouse position for the next frame
         lastMouseX = x;
         lastMouseY = y;
     }
 }
 
-void mouseClick(int button, int state, int x, int y) {
-    if (button == GLUT_LEFT_BUTTON) {
-        if (state == GLUT_DOWN) {
-            isDragging = true;
-            lastMouseX = x;
-            lastMouseY = y;
-
-            // Determine whether we are moving or rotating based on Shift key
-            if (glutGetModifiers() & GLUT_ACTIVE_SHIFT) {
-                isMoving = true;
-            }
-            else {
-                isMoving = false;
-            }
-
-            // Model selection logic (ray picking)
-            glm::vec3 rayOrigin = camera.eye;
-            glm::vec3 rayDirection = screenToWorldRay(x, y);
-            selectedModelIndex = 1000;
-            float radius = 0.5f;
-
-            for (size_t i = 0; i < models.size(); i++) {
-                if (rayIntersectsModel(rayOrigin, rayDirection, models[i], radius)) {
-                    selectedModelIndex = i;
-                    std::cout << "Model " << i << " selected." << std::endl;
-                    break;
-                }
-            }
-
-            if (selectedModelIndex != 1000) {
-                std::cout << "You selected model " << selectedModelIndex << std::endl;
-            }
-        }
-        else if (state == GLUT_UP) {
-            isDragging = false;
-        }
+void mouseFunc(int button, int state, int x, int y) {
+    if (button == GLUT_LEFT_BUTTON && state == GLUT_DOWN) {
+        isDragging = true;
+        lastMouseX = x;
+        lastMouseY = y;
+    }
+    else if (button == GLUT_LEFT_BUTTON && state == GLUT_UP) {
+        isDragging = false;
     }
 }
 
-// Mouse motion callback
 void motionFunc(int x, int y) {
     if (isDragging) {
-        mouseDrag(x, y);  // Ensure dragging is called in motion
+        mouseDrag(x, y);
     }
 }
 
 int main(int argc, char** argv) {
+    // Initialize GLUT and GLEW
     glutInit(&argc, argv);
-    glutInitDisplayMode(GLUT_RGBA | GLUT_DOUBLE | GLUT_DEPTH);
+    glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB | GLUT_DEPTH);
     glutInitWindowSize(width, height);
     glutCreateWindow(title);
+    glewInit();
 
-    glewExperimental = GL_TRUE;
-    if (glewInit() != GLEW_OK) {
-        std::cerr << "Failed to initialize GLEW" << std::endl;
-        return EXIT_FAILURE;
-    }
-
+    // Initialize the scene
     initialize();
 
-
-
-    glutReshapeFunc(reshape);
+    // Register GLUT callbacks
     glutDisplayFunc(display);
+    glutReshapeFunc(reshape);
     glutMouseFunc(mouseFunc);
+    glutMotionFunc(motionFunc);
+    glutPassiveMotionFunc(motionFunc);
     glutIdleFunc(glutPostRedisplay);
 
-    atexit(cleanup);
+    // ImGui-specific mouse handling
+    glutMouseFunc(mouseCallback);
+
+    // Run the GLUT main loop
     glutMainLoop();
+
+    // Cleanup before exiting
     cleanup();
 
     return 0;
