@@ -34,7 +34,7 @@ Geometry* models[] = { &cube, &teapot, &bunny, &sphere };
 const char* modelNames[] = { "Cube", "Teapot", "Bunny", "Sphere" }; // Names for UI
 int selectedModelIndex = -1; // No model selected by default
 
-// Shader
+//shader
 struct NormalShader : Shader {
     glm::mat4 modelview = glm::mat4(1.0f);
     GLuint modelview_loc = 0;
