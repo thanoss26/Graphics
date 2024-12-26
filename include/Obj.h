@@ -12,6 +12,8 @@ class Obj : public Geometry {
 public:
 
     void init(const char * filename);
+
+    void render();
         
 };
 

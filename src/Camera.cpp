@@ -29,19 +29,6 @@ void Camera::rotateUp(const float degrees) {
     glm::vec3 forward = glm::normalize(target - eye);
     up = glm::normalize(glm::cross(glm::cross(forward, up), forward));
 }
-
-//// Implement the trackball rotation controlled by the mouse
-//void Camera::rotate(const float deltaX, const float deltaY) {
-//    // For simplicity, let's implement the rotation using Euler angles
-//    // Rotate based on mouse movement along X and Y axes (deltaX and deltaY)
-//
-//    // Horizontal rotation (around Y axis)
-//    rotateUp(deltaX * 0.1f);  // DeltaX is mapped to rotation around the up vector
-//
-//    // Vertical rotation (around X axis)
-//    rotateRight(deltaY * 0.1f); // DeltaY is mapped to rotation around the right vector
-//}
-
 // Compute the view and projection matrices
 void Camera::computeMatrices(void) {
     // View matrix using glm::lookAt

@@ -150,6 +150,7 @@ glm::vec3 cameraUp(0.0f, 1.0f, 0.0f); // Up direction
 glm::mat4 viewMatrix = glm::lookAt(cameraPosition, cameraTarget, cameraUp);
 
 void renderUI() {
+    // Start a new frame for ImGui
     ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplGLUT_NewFrame();
     ImGui::NewFrame();
@@ -160,19 +161,21 @@ void renderUI() {
     ImGui::Begin("Model Selection");
     ImGui::Text("Select a model:");
 
+    // Combo box to select a model
     if (ImGui::Combo("Models", &selectedModelIndex, modelNames, IM_ARRAYSIZE(modelNames))) {
         std::cout << "Selected Model: " << modelNames[selectedModelIndex] << std::endl;
     }
 
+    // Button to deselect model
     if (ImGui::Button("Deselect")) {
         selectedModelIndex = -1;
         std::cout << "Model deselected." << std::endl;
     }
 
-
+    // Checkbox for wireframe mode
     ImGui::Checkbox("Wireframe Mode", &bWireframe);
 
-       // Start mouse rotation when clicking
+    // Mouse rotation
     ImVec2 mousePos = ImGui::GetMousePos();
     bool mouseDown = ImGui::IsMouseDown(0); // Left mouse button
 
@@ -182,7 +185,8 @@ void renderUI() {
             isRotating = true;
             lastMouseX = mousePos.x;
             lastMouseY = mousePos.y;
-        } else {
+        }
+        else {
             // Calculate mouse delta movement
             float deltaX = mousePos.x - lastMouseX;
             float deltaY = mousePos.y - lastMouseY;
@@ -191,20 +195,24 @@ void renderUI() {
             rotationMatrix = glm::rotate(rotationMatrix, glm::radians(-deltaX * rotationSpeed), glm::vec3(0.0f, 1.0f, 0.0f)); // Rotate around Y-axis
             rotationMatrix = glm::rotate(rotationMatrix, glm::radians(-deltaY * rotationSpeed), glm::vec3(1.0f, 0.0f, 0.0f)); // Rotate around X-axis
 
+            // Update the last mouse position
             lastMouseX = mousePos.x;
             lastMouseY = mousePos.y;
         }
-    } else {
+    }
+    else {
+        // Stop rotation when mouse is released
         isRotating = false;
     }
 
-
+    // Button to add a new model
     if (ImGui::Button("Add model")) {
         std::cout << "Add model button pressed." << std::endl;
 
         // Create a new model based on the selected model index
         std::unique_ptr<Obj> newModel = std::make_unique<Obj>();
 
+        // Initialize the new model based on selected index
         if (selectedModelIndex == 0) {
             newModel->init("models/teapot.obj");
         }
@@ -240,12 +248,13 @@ void renderUI() {
 
         // Add the new model to the list of loaded models
         loadedModels.push_back(std::move(newModel));
-
+        selectedModelIndex = loadedModels.size() - 1; // Select the newly added model
         std::cout << "New model added at position: " << modelPosition.x << ", " << modelPosition.y << ", " << modelPosition.z << std::endl;
     }
 
     ImGui::End();
 
+    // Render the ImGui data
     ImGui::Render();
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 }
@@ -275,24 +284,19 @@ void renderModels() {
             continue;
         }
 
-        // Check if selectedModelIndex is within the bounds of loadedModels
         bool isHighlighted = false;
         if (selectedModelIndex >= 0 && selectedModelIndex < loadedModels.size()) {
-            isHighlighted = (loadedModel.get() == loadedModels[selectedModelIndex].get());
+            isHighlighted = (loadedModel == loadedModels[selectedModelIndex]);
         }
 
-        // Apply rotation matrix to dynamically loaded model
+        // Apply rotation matrix to dynamic models
         loadedModel->model = rotationMatrix * loadedModel->model;
-
         shader.modelview = camera.view * loadedModel->model;
-
-        // Set highlight color for dynamically loaded models (red if highlighted, white otherwise)
-        glm::vec4 highlightColor = isHighlighted ? glm::vec4(1.0f, 0.0f, 0.0f, 1.0f) : glm::vec4(0.8f, 0.8f, 0.8f, 0.8f);
-
-        shader.setUniforms(isHighlighted, glm::vec3(highlightColor)); // Set highlight color
+        shader.setUniforms(isHighlighted, glm::vec3(1.0f, 0.0f, 0.0f)); // Apply red highlight color
         loadedModel->draw();
     }
 }
+
 void display() 
 {
     if (bWireframe)

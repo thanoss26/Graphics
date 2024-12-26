@@ -24,7 +24,7 @@ set(IMGUI_SOURCES
 list(APPEND SOURCES_MODEL_VIEWER ${IMGUI_SOURCES})
 
 # Add executable target
-add_executable(ModelViewer ${SOURCES_MODEL_VIEWER} "include/Frustum.h")
+add_executable(ModelViewer ${SOURCES_MODEL_VIEWER} "include/Frustum.h" )
 
 # Include headers
 set(
